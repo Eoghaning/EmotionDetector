@@ -2,41 +2,59 @@ import torch
 import torch.nn as nn
 
 class EmotionCNN(nn.Module):
-    def __init__(self, num_classes=8):
+    def __init__(self, num_classes=7):
         super(EmotionCNN, self).__init__()
         
-        self.conv1 = nn.Conv2d(1, 32, 3, padding=1)
-        self.bn1 = nn.BatchNorm2d(32)
+        # Block 1: Input 1 channel (Grayscale) -> 64
+        self.b1 = nn.Sequential(
+            nn.Conv2d(1, 64, kernel_size=3, padding=1),
+            nn.Conv2d(64, 64, kernel_size=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(),
+            nn.MaxPool2d(2)
+        )
         
-        self.conv2 = nn.Conv2d(32, 64, 3, padding=1, groups=32)
-        self.bn2 = nn.BatchNorm2d(64)
-        self.conv3 = nn.Conv2d(64, 64, 1)
-        self.bn3 = nn.BatchNorm2d(64)
+        # Block 2: 64 -> 128
+        self.b2 = nn.Sequential(
+            nn.Conv2d(64, 128, kernel_size=3, padding=1, groups=64),
+            nn.Conv2d(128, 128, kernel_size=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(),
+            nn.MaxPool2d(2)
+        )
         
-        self.conv4 = nn.Conv2d(64, 128, 3, padding=1, groups=64)
-        self.bn4 = nn.BatchNorm2d(128)
-        self.conv5 = nn.Conv2d(128, 128, 1)
-        self.bn5 = nn.BatchNorm2d(128)
+        # Block 3: 128 -> 256
+        self.b3 = nn.Sequential(
+            nn.Conv2d(128, 256, kernel_size=3, padding=1, groups=128),
+            nn.Conv2d(256, 256, kernel_size=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(),
+            nn.MaxPool2d(2)
+        )
         
-        self.pool = nn.MaxPool2d(2, 2)
-        self.dropout = nn.Dropout(0.25)
-        self.global_pool = nn.AdaptiveAvgPool2d((1, 1))
-        self.fc = nn.Linear(128, num_classes)
+        # Block 4: 256 -> 512
+        self.b4 = nn.Sequential(
+            nn.Conv2d(256, 512, kernel_size=3, padding=1, groups=256),
+            nn.Conv2d(512, 512, kernel_size=1),
+            nn.BatchNorm2d(512),
+            nn.ReLU(),
+            nn.AdaptiveAvgPool2d(1)
+        )
         
+        self.classifier = nn.Sequential(
+            nn.Identity(),      # index 0
+            nn.Flatten(),       # index 1
+            nn.Linear(512, 256),# index 2
+            nn.ReLU(),          # index 3
+            nn.BatchNorm1d(256),# index 4
+            nn.Dropout(0.5),    # index 5
+            nn.Linear(256, num_classes) # index 6
+        )
+
     def forward(self, x):
-        x = torch.relu(self.bn1(self.conv1(x)))
-        
-        x = torch.relu(self.bn2(self.conv2(x)))
-        x = torch.relu(self.bn3(self.conv3(x)))
-        x = self.pool(x)
-        x = self.dropout(x)
-        
-        x = torch.relu(self.bn4(self.conv4(x)))
-        x = torch.relu(self.bn5(self.conv5(x)))
-        x = self.pool(x)
-        x = self.dropout(x)
-        
-        x = self.global_pool(x)
-        x = x.view(x.size(0), -1)
-        x = self.fc(x)
+        x = self.b1(x)
+        x = self.b2(x)
+        x = self.b3(x)
+        x = self.b4(x)
+        x = self.classifier(x)
         return x
