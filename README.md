@@ -2,6 +2,8 @@
 
 A real-time computer vision pipeline that classifies facial expressions using a custom PyTorch CNN and overlays a transparent emoji corresponding to the detected emotion.
 
+**MILESTONE: Final ML Model achieved 67.0% Accuracy (April 2026)**
+
 ## Core Features
 - **Real-time Inference**: Processes webcam feed at 25+ FPS on CPU.
 - **8-Class Emotion Mapping**:
@@ -52,8 +54,9 @@ face2emoji/
 │   ├── utils/                    # Helper modules
 │   │   ├── face_detection.py
 │   │   ├── overlay.py
-│   │   └── smoothing.py
-│   └── main.py                   # Real-time application entry point
-│
-├── requirements.txt
-└── README.md
+│   │   ├── smoothing.py
+│   │   └── geometric.py          # Geometric Landmark Logic
+│   ├── ml_main.py                # Pure AI Detector
+│   ├── geo_main.py               # Pure Geometric Detector
+│   ├── hybrid_main.py            # Hybrid AI+Geo Detector
+│   └── train.py                  # Training script
