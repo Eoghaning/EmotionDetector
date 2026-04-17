@@ -164,6 +164,16 @@ def main():
             cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), color, 2)
             emoji_target_w, emoji_y_offset = overlay_emoji(frame, emoji_dict, final_display_emo, x_min, y_min, face_w)
             cv2.putText(frame, final_display_emo, (x_min + face_w//2 + emoji_target_w//2 + 10, emoji_y_offset + int(emoji_target_w * 0.8)), 1, 1.5, (0, 0, 0), 2)
+            
+            thresholds = {"Neutral": 70, "Angry": 50, "Surprise": 95, "Happy": 55, "Sad": 50, "Fear": 15}
+            for i, emo in enumerate(EMOTIONS):
+                score = scores[emo]
+                disp_score = score
+                target = thresholds.get(emo, "N/A")
+                dash_text = f"{emo}: {disp_score:.0f} / {target}"
+                cv2.putText(frame, dash_text, (x_max + 10, y_min + 30 + i*25), 1, 1.2, (0, 0, 0), 2)
+            for landmark in face_landmarks:
+                cv2.circle(frame, (int(landmark.x * w), int(landmark.y * h)), 1, (0, 255, 0), -1)
         cv2.imshow('Final High-Confidence Model', frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break

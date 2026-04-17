@@ -100,7 +100,14 @@ def main():
                 cv2.rectangle(frame, (x, y), (x+w, y+h), color, 2)
                 emoji_target_w, emoji_y_offset = overlay_emoji(frame, emoji_dict, emotion, x, y, w)
                 cv2.putText(frame, emotion, (x + w//2 + emoji_target_w//2 + 10, emoji_y_offset + int(emoji_target_w * 0.8)), 1, 1.5, (0, 0, 0), 2)
-
+                
+                bar_y = y + h + 10
+                bar_w = w // len(EMOTIONS)
+                for i, (prob, em) in enumerate(zip(smoothed_probs, EMOTIONS)):
+                    h_bar = int(prob * 50)
+                    cv2.putText(frame, em[0], (x + i*bar_w + 5, bar_y + 65), 1, 0.4, (255, 255, 255), 1)
+                    cv2.rectangle(frame, (x + i*bar_w, bar_y + 50 - h_bar), (x + i*bar_w + bar_w - 2, bar_y + 50), (200, 100, 0), -1)
+            
             cv2.imshow("AI Emotion Detector (6-Emotion)", frame)
             if cv2.waitKey(1) & 0xFF == ord('q'): break
     cap.release()

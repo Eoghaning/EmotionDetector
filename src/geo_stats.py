@@ -101,6 +101,12 @@ def main():
             cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), (0, 255, 255), 2)
             emoji_target_w, emoji_y_offset = overlay_emoji(frame, emoji_dict, emotion, x_min, y_min, face_w)
             cv2.putText(frame, emotion, (x_min + face_w//2 + emoji_target_w//2 + 10, emoji_y_offset + int(emoji_target_w * 0.8)), 1, 1.5, (0, 0, 0), 2)
+            
+            cv2.putText(frame, f"Mouth Ratio: {geo_data['mar']:.2f}", (10, 30), 1, 1, (0, 0, 0), 1)
+            cv2.putText(frame, f"Lip Curvature: {geo_data['curvature']:.4f}", (10, 50), 1, 1, (0, 0, 0), 1)
+
+            for lx, ly in smoothed_landmarks:
+                cv2.circle(frame, (int(lx * w), int(ly * h)), 1, (0, 255, 0), -1)
 
         cv2.imshow('Geometric Only Detection', frame)
         if cv2.waitKey(5) & 0xFF == ord('q'):
