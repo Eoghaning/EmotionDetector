@@ -5,16 +5,49 @@ import os
 import sys
 from torchvision import transforms
 from collections import deque
-
 import mediapipe as mp
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
-
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from src.config import MODEL_PATH, EMOTIONS, MODEL_INPUT_SIZE, NORM_MEAN, NORM_STD
+from src.config import MODEL_PATH, EMOTIONS, MODEL_INPUT_SIZE, NORM_MEAN, NORM_STD, EMOJI_DIR
 from src.model import EmotionResNet
 from src.utils.geometric import GeometricEmotionDetector
-from src.utils.hybrid_config import STRENGTHS, SAD_PHYSICAL_OVERRIDE, SMOOTHING_WINDOW
+from src.utils.hybrid_config import STRENGTHS, SAD_PHYSICAL_OVERRIDE, SMOOTHING_WINDOW, TRUTH_TABLE
+
+EMOJI_MAP = {
+    'Angry': 'angry.png',
+    'Fear': 'fear.png',
+    'Happy': 'happy.png',
+    'Sad': 'sad.png',
+    'Surprise': 'suprise.png',
+    'Neutral': 'neutral.png'
+}
+
+def overlay_emoji(frame, emoji_dict, emotion, x_min, y_min, face_w, face_h=0):
+    if emotion not in emoji_dict or emoji_dict[emotion] is None:
+        return 0, 0
+    emoji = emoji_dict[emotion]
+    emoji_h, emoji_w = emoji.shape[:2]
+    target_w = int(face_w * 0.8)
+    target_h = int(emoji_h * (target_w / emoji_w))
+    emoji_resized = cv2.resize(emoji, (target_w, target_h))
+    y_offset = max(0, y_min - target_h - 5)
+    x_offset = x_min + face_w//2 - target_w//2
+    if y_offset + target_h > frame.shape[0]:
+        y_offset = max(0, frame.shape[0] - target_h)
+    if x_offset + target_w > frame.shape[1]:
+        x_offset = max(0, frame.shape[1] - target_w)
+    if x_offset < 0:
+        x_offset = 0
+    if emoji_resized.shape[2] == 4:
+        for c in range(3):
+            frame[y_offset:y_offset+target_h, x_offset:x_offset+target_w, c] = \
+                emoji_resized[:,:,c] * (emoji_resized[:,:,3]/255.0) + \
+                frame[y_offset:y_offset+target_h, x_offset:x_offset+target_w, c] * \
+                (1 - emoji_resized[:,:,3]/255.0)
+    else:
+        frame[y_offset:y_offset+target_h, x_offset:x_offset+target_w] = emoji_resized
+    return target_w, y_offset
 
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -27,6 +60,15 @@ def main():
     
     MODEL_MAP = [0, 2, 3, 4, 5, 6] 
     geo_detector = GeometricEmotionDetector()
+    
+    emoji_dict = {}
+    for emo, filename in EMOJI_MAP.items():
+        path = os.path.join(EMOJI_DIR, filename)
+        if os.path.exists(path):
+            emoji_dict[emo] = cv2.imread(path, cv2.IMREAD_UNCHANGED)
+        else:
+            emoji_dict[emo] = None
+    
     base_options = python.BaseOptions(model_asset_path='assets/face_landmarker.task')
     options = vision.FaceLandmarkerOptions(base_options=base_options, output_face_blendshapes=True, num_faces=1)
     detector = vision.FaceLandmarker.create_from_options(options)
@@ -63,8 +105,8 @@ def main():
             padding = 20
             x_min, y_min = max(0, x_min - padding), max(0, y_min - padding)
             x_max, y_max = min(w, x_max + padding), min(h, y_max + padding)
+            face_w = x_max - x_min
             
-            # 1. AI PREDICTION
             face_crop = cv2.cvtColor(frame[y_min:y_max, x_min:x_max], cv2.COLOR_BGR2GRAY)
             if face_crop.size > 0:
                 face_tensor = transform(face_crop).unsqueeze(0).to(device)
@@ -76,12 +118,8 @@ def main():
             
             ai_buffer.append(ai_probs)
             smooth_ai = np.mean(ai_buffer, axis=0)
-
-            # 2. GEOMETRIC PREDICTION
             geo_data = geo_detector.analyze(landmarks)
             geo_guess = geo_data["guess"]
-
-            # 3. HYBRID CALCULATION
             hybrid_probs = ai_probs.copy()
             if geo_guess in STRENGTHS:
                 hybrid_probs[EMOTIONS.index(geo_guess)] += STRENGTHS[geo_guess]
@@ -89,68 +127,54 @@ def main():
             hybrid_buffer.append(hybrid_probs)
             smooth_hybrid = np.mean(hybrid_buffer, axis=0)
             
-            # 4. FINAL THRESHOLD & CONFLICT LOGIC
             scores = {emo: smooth_hybrid[i] * 100 for i, emo in enumerate(EMOTIONS)}
             met_emotions = {}
-
-            # Base Thresholds
-            if scores["Fear"] >= 11: met_emotions["Fear"] = scores["Fear"]
+            if scores["Fear"] >= 15: met_emotions["Fear"] = 15
             if scores["Neutral"] >= 70: met_emotions["Neutral"] = scores["Neutral"]
             if scores["Surprise"] >= 95: met_emotions["Surprise"] = scores["Surprise"]
             if scores["Happy"] >= 55: met_emotions["Happy"] = scores["Happy"]
-            if scores["Sad"] >= 60: met_emotions["Sad"] = scores["Sad"]
-
-            # Dynamic Anger Penalty: -1% for every 1% Neutral is above 75%
+            if scores["Sad"] >= 50: met_emotions["Sad"] = scores["Sad"]
             anger_penalty = max(0, scores["Neutral"] - 75)
             adjusted_angry = scores["Angry"] - anger_penalty
-            if adjusted_angry >= 45: met_emotions["Angry"] = adjusted_angry
-
-            # CONFLICT RESOLUTION
-            final_display_emo = "Neutral"
-            final_display_score = scores["Neutral"]
-
-            if met_emotions:
-                # Rule 1: Non-neutral wins over Neutral
-                if len(met_emotions) > 1 and "Neutral" in met_emotions:
-                    del met_emotions["Neutral"]
-                
-                # Rule 2: Fear vs Angry formula A vs (F * 3)
-                if "Fear" in met_emotions and "Angry" in met_emotions:
-                    if (met_emotions["Fear"] * 3) > met_emotions["Angry"]:
-                        del met_emotions["Angry"]
-                    else:
-                        del met_emotions["Fear"]
-
-                # Rule 3: Highest remaining score wins
-                best_emo = max(met_emotions, key=met_emotions.get)
-                final_display_emo = best_emo
-                final_display_score = met_emotions[best_emo]
-
-            # 5. VISUALS
-            display_text = f"{final_display_emo} ({final_display_score:.0f}%)"
-            color = (0, 255, 255) # Yellow
+            if adjusted_angry >= 50: met_emotions["Angry"] = adjusted_angry
+            if scores["Neutral"] >= 50:
+                final_display_emo = "Neutral"
+                final_display_score = scores["Neutral"]
+            else:
+                if met_emotions:
+                    if len(met_emotions) == 2 and "Neutral" in met_emotions:
+                        del met_emotions["Neutral"]
+                    
+                    if "Fear" in met_emotions and len(met_emotions) > 1:
+                        for emo in list(met_emotions.keys()):
+                            if emo != "Fear":
+                                if (met_emotions["Fear"] * 3) > (met_emotions[emo] * 0.8):
+                                    del met_emotions[emo]
+                                else:
+                                    del met_emotions["Fear"]
+                                break
+                    if met_emotions:
+                        best_emo = max(met_emotions, key=met_emotions.get)
+                        final_display_emo = best_emo
+                        final_display_score = met_emotions[best_emo]
+            color = (0, 255, 255)
             cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), color, 2)
-            cv2.putText(frame, f"FINAL: {display_text}", (x_min, y_min-10), 1, 1.5, color, 2)
+            emoji_target_w, emoji_y_offset = overlay_emoji(frame, emoji_dict, final_display_emo, x_min, y_min, face_w)
+            cv2.putText(frame, final_display_emo, (x_min + face_w//2 + emoji_target_w//2 + 10, emoji_y_offset + int(emoji_target_w * 0.8)), 1, 1.5, (255, 255, 255), 2)
             
-            # Persistent Dashboard (Black text to the right)
-            thresholds = {"Neutral": 70, "Angry": 45, "Surprise": 95, "Happy": 55, "Sad": 60, "Fear": 11}
+            thresholds = {"Neutral": 70, "Angry": 50, "Surprise": 95, "Happy": 55, "Sad": 50, "Fear": 15}
             for i, emo in enumerate(EMOTIONS):
                 score = scores[emo]
-                # Show adjusted score for Angry in the dashboard to be clear
                 disp_score = adjusted_angry if emo == "Angry" else score
                 target = thresholds.get(emo, "N/A")
                 dash_text = f"{emo}: {disp_score:.0f} / {target}"
                 cv2.putText(frame, dash_text, (x_max + 10, y_min + 30 + i*25), 1, 1.2, (0, 0, 0), 2)
-
             for landmark in face_landmarks:
                 cv2.circle(frame, (int(landmark.x * w), int(landmark.y * h)), 1, (0, 255, 0), -1)
-
         cv2.imshow('Final High-Confidence Model', frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
-
     cap.release()
     cv2.destroyAllWindows()
-
 if __name__ == "__main__":
     main()

@@ -11,11 +11,45 @@ from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from src.config import MODEL_PATH, EMOTIONS, MODEL_INPUT_SIZE, NORM_MEAN, NORM_STD
+from src.config import MODEL_PATH, EMOTIONS, MODEL_INPUT_SIZE, NORM_MEAN, NORM_STD, EMOJI_DIR
 from src.model import EmotionResNet
 from src.utils.geometric import GeometricEmotionDetector
-# Import the new manual dashboard
 from src.utils.hybrid_config import STRENGTHS, SAD_PHYSICAL_OVERRIDE, SMOOTHING_WINDOW, TRUTH_TABLE
+
+EMOJI_MAP = {
+    'Angry': 'angry.png',
+    'Fear': 'fear.png',
+    'Happy': 'happy.png',
+    'Sad': 'sad.png',
+    'Surprise': 'suprise.png',
+    'Neutral': 'neutral.png'
+}
+
+def overlay_emoji(frame, emoji_dict, emotion, x_min, y_min, face_w, face_h=0):
+    if emotion not in emoji_dict or emoji_dict[emotion] is None:
+        return 0, 0
+    emoji = emoji_dict[emotion]
+    emoji_h, emoji_w = emoji.shape[:2]
+    target_w = int(face_w * 0.8)
+    target_h = int(emoji_h * (target_w / emoji_w))
+    emoji_resized = cv2.resize(emoji, (target_w, target_h))
+    y_offset = max(0, y_min - target_h - 5)
+    x_offset = x_min + face_w//2 - target_w//2
+    if y_offset + target_h > frame.shape[0]:
+        y_offset = max(0, frame.shape[0] - target_h)
+    if x_offset + target_w > frame.shape[1]:
+        x_offset = max(0, frame.shape[1] - target_w)
+    if x_offset < 0:
+        x_offset = 0
+    if emoji_resized.shape[2] == 4:
+        for c in range(3):
+            frame[y_offset:y_offset+target_h, x_offset:x_offset+target_w, c] = \
+                emoji_resized[:,:,c] * (emoji_resized[:,:,3]/255.0) + \
+                frame[y_offset:y_offset+target_h, x_offset:x_offset+target_w, c] * \
+                (1 - emoji_resized[:,:,3]/255.0)
+    else:
+        frame[y_offset:y_offset+target_h, x_offset:x_offset+target_w] = emoji_resized
+    return target_w, y_offset
 
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -28,6 +62,15 @@ def main():
     
     MODEL_MAP = [0, 2, 3, 4, 5, 6] 
     geo_detector = GeometricEmotionDetector()
+    
+    emoji_dict = {}
+    for emo, filename in EMOJI_MAP.items():
+        path = os.path.join(EMOJI_DIR, filename)
+        if os.path.exists(path):
+            emoji_dict[emo] = cv2.imread(path, cv2.IMREAD_UNCHANGED)
+        else:
+            emoji_dict[emo] = None
+    
     base_options = python.BaseOptions(model_asset_path='assets/face_landmarker.task')
     options = vision.FaceLandmarkerOptions(base_options=base_options, output_face_blendshapes=True, num_faces=1)
     detector = vision.FaceLandmarker.create_from_options(options)
@@ -65,8 +108,8 @@ def main():
             padding = 20
             x_min, y_min = max(0, x_min - padding), max(0, y_min - padding)
             x_max, y_max = min(w, x_max + padding), min(h, y_max + padding)
+            face_w = x_max - x_min
             
-            # 1. AI PREDICTION
             face_crop = cv2.cvtColor(frame[y_min:y_max, x_min:x_max], cv2.COLOR_BGR2GRAY)
             if face_crop.size > 0:
                 face_tensor = transform(face_crop).unsqueeze(0).to(device)
@@ -78,7 +121,6 @@ def main():
             ai_buffer.append(ai_probs)
             smooth_ai = np.mean(ai_buffer, axis=0)
 
-            # 2. GEOMETRIC PREDICTION
             geo_data = geo_detector.analyze(landmarks)
             geo_guess = geo_data["guess"]
             geo_probs = np.zeros(6)
@@ -87,7 +129,6 @@ def main():
             geo_buffer.append(geo_probs)
             smooth_geo = np.mean(geo_buffer, axis=0)
 
-            # 3. HYBRID LOGIC (Using Dashboard Strengths)
             hybrid_probs = ai_probs.copy()
             if geo_guess in STRENGTHS:
                 hybrid_probs[EMOTIONS.index(geo_guess)] += STRENGTHS[geo_guess]
@@ -98,49 +139,45 @@ def main():
             final_idx = np.argmax(smooth_hybrid)
             final_emotion = EMOTIONS[final_idx]
             
-            # Apply Truth Table Conflict Resolution
             ai_best = EMOTIONS[np.argmax(smooth_ai)]
             if TRUTH_TABLE.get("SAD_OVER_ANGRY") and ai_best == "Angry" and geo_guess == "Sad":
                 final_emotion = "Sad"
             if TRUTH_TABLE.get("SURPRISE_OVER_FEAR") and ai_best == "Fear" and geo_guess == "Surprise":
                 final_emotion = "Surprise"
             
-            # Happy Threshold Check
             if ai_best == "Happy" and smooth_ai[EMOTIONS.index("Happy")] > TRUTH_TABLE.get("HAPPY_THRESHOLD", 0.4):
-                final_emotion = "Happy" # AI dominates if very confident
+                final_emotion = "Happy"
 
-            # Apply Manual Physical Override
             if SAD_PHYSICAL_OVERRIDE and geo_guess == "Sad":
                 final_emotion = "Sad"
 
-            # 4. VISUALS
             color = (255, 0, 0) if final_emotion == "Sad" else (0, 255, 0)
             cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), color, 2)
+            emoji_target_w, emoji_y_offset = overlay_emoji(frame, emoji_dict, final_emotion, x_min, y_min, face_w)
+            cv2.putText(frame, final_emotion, (x_min + face_w//2 + emoji_target_w//2 + 10, emoji_y_offset + int(emoji_target_w * 0.8)), 1, 1.5, (255, 255, 255), 2)
             
-            # Show sureness for each branch
             ai_score = smooth_ai[np.argmax(smooth_ai)] * 100
             geo_score = geo_data["confidence"]
             hy_score = smooth_hybrid[final_idx] * 100
             
-            y_offset = y_min - 10
-            cv2.putText(frame, f"HYBRID: {final_emotion} ({hy_score:.0f}%)", (x_min, y_offset), 1, 1.5, color, 2)
-            cv2.putText(frame, f"AI: {ai_best} ({ai_score:.0f}%)", (x_min, y_offset - 50), 1, 1.0, (255, 255, 255), 1)
-            cv2.putText(frame, f"GEO: {geo_guess} ({geo_score:.0f}%)", (x_min, y_offset - 30), 1, 1.0, (255, 255, 255), 1)
+            bw = max(8, face_w // 25)
+            bh_max = max(25, face_w // 6)
+            chart_spacing = bh_max + 40
+            label_width = 80
             
-            # Triple Charts
-            bx, by = x_max + 15, y_min
-            bw, bh_max = 12, 40
+            bx = x_max + 15
+            by = y_min
             
-            def draw_chart(title, probs, start_y):
-                cv2.putText(frame, title, (bx, start_y - 5), 1, 0.8, (255, 255, 255), 1)
+            def draw_chart(label, label_score, probs, start_y):
+                cv2.putText(frame, f"{label}: {label_score:.0f}%", (bx + 6 * (bw + 3) + 10, start_y + bh_max // 2 + 5), 1, 0.7, (255, 255, 255), 2)
                 for i, (p, em) in enumerate(zip(probs, EMOTIONS)):
                     h_bar = int(max(0, min(1.0, p)) * bh_max)
-                    cv2.putText(frame, em[0], (bx + i*(bw+4), start_y + bh_max + 12), 1, 0.5, (200, 200, 200), 1)
-                    cv2.rectangle(frame, (bx + i*(bw+4), start_y + bh_max - h_bar), (bx + i*(bw+4) + bw, start_y + bh_max), (200, 100, 0), -1)
+                    cv2.putText(frame, em[0], (bx + i * (bw + 3) + 2, start_y + bh_max + 12), 1, 0.4, (200, 200, 200), 1)
+                    cv2.rectangle(frame, (bx + i * (bw + 3), start_y + bh_max - h_bar), (bx + i * (bw + 3) + bw, start_y + bh_max), (200, 100, 0), -1)
 
-            draw_chart("AI Scores", smooth_ai, by)
-            draw_chart("GEO Votes", smooth_geo, by + 70)
-            draw_chart("HYBRID (Final)", smooth_hybrid, by + 140)
+            draw_chart("AI", ai_score, smooth_ai, by)
+            draw_chart("GEO", geo_score, smooth_geo, by + chart_spacing)
+            draw_chart("HYBRID", hy_score, smooth_hybrid, by + chart_spacing * 2)
             
             for landmark in face_landmarks:
                 cv2.circle(frame, (int(landmark.x * w), int(landmark.y * h)), 1, (0, 255, 0), -1)
