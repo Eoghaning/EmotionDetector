@@ -88,7 +88,7 @@ def main():
                 face_roi = gray[y:y+h, x:x+w]
                 face_tensor = transform(face_roi).unsqueeze(0).to(device)
                 
-                all_probs = torch.softmax(model(face_tensor), dim=1)[0].cpu().numpy()
+                all_probs = torch.softmax(model(face_tensor), dim=1)[0].detach().cpu().numpy()
                 ai_probs = all_probs[MODEL_MAP]
                 
                 prob_buffer.append(ai_probs)
@@ -109,9 +109,13 @@ def main():
                     cv2.rectangle(frame, (x + i*bar_w, bar_y + 50 - h_bar), (x + i*bar_w + bar_w - 2, bar_y + 50), (200, 100, 0), -1)
             
             cv2.imshow("AI Emotion Detector (6-Emotion)", frame)
-            if cv2.waitKey(1) & 0xFF == ord('q'): break
-    cap.release()
-    cv2.destroyAllWindows()
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord('q') or key == ord('Q') or key == 27:
+                break
+            if cv2.getWindowProperty("AI Emotion Detector (6-Emotion)", cv2.WND_PROP_VISIBLE) < 1:
+                break
+        cap.release()
+        cv2.destroyAllWindows()
 
 if __name__ == "__main__":
     main()

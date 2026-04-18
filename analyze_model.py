@@ -5,76 +5,94 @@ import numpy as np
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from torchvision import transforms
+import mediapipe as mp
+from mediapipe.tasks import python
+from mediapipe.tasks.python import vision
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from src.config import DATA_PATH, MODEL_PATH, EMOTIONS, MODEL_INPUT_SIZE, NORM_MEAN, NORM_STD
 from src.dataset import FER2013Dataset
 from src.model import EmotionResNet
+from src.utils.geometric import GeometricEmotionDetector
 
-def analyze_model():
+def analyze_hybrid():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    num_classes = len(EMOTIONS)
-    
-    # Use EmotionResNet since we updated the training script to use ResNet-18
-    model = EmotionResNet(num_classes=num_classes, pretrained=False).to(device)
-    
-    if os.path.exists(MODEL_PATH):
-        print(f"Loading model from {MODEL_PATH}")
-        try:
-            state_dict = torch.load(MODEL_PATH, map_location=device)
-            model.load_state_dict(state_dict)
-            model.eval()
-            print("✓ Model loaded successfully.")
-        except Exception as e:
-            print(f"❌ Error loading model: {e}")
-            print("The model in 'models/emotion_model.pth' might be the old CNN version.")
-            return
-    else:
-        print(f"Model file not found at {MODEL_PATH}")
-        return
+    print(f"Starting Hybrid Evaluation (6-Emotions) on {device}...")
 
-    # Use standard validation transforms
+    model = EmotionResNet(num_classes=7, pretrained=False).to(device)
+    if os.path.exists(MODEL_PATH):
+        model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
+        model.eval()
+
+    geo_detector = GeometricEmotionDetector()
+    base_options = python.BaseOptions(model_asset_path='assets/face_landmarker.task')
+    options = vision.FaceLandmarkerOptions(base_options=base_options, num_faces=1)
+    detector = vision.FaceLandmarker.create_from_options(options)
+
+    MODEL_MAP = [0, 2, 3, 4, 5, 6]
+
     transform = transforms.Compose([
         transforms.Resize(MODEL_INPUT_SIZE),
         transforms.ToTensor(),
         transforms.Normalize(mean=NORM_MEAN, std=NORM_STD)
     ])
 
-    # Try to find test data
     test_path = DATA_PATH.replace("train", "test")
     if not os.path.exists(test_path):
-        test_path = DATA_PATH # Fallback
-        
-    print(f"Analyzing on: {test_path}")
+        test_path = DATA_PATH
+
+    print(f"Dataset: {test_path}")
     dataset = FER2013Dataset(test_path, transform=transform)
-    loader = DataLoader(dataset, batch_size=64, shuffle=False, num_workers=0)
-    
-    all_predictions = []
-    all_labels = []
-    
-    print("\nEvaluating...")
-    with torch.no_grad():
-        for images, labels in tqdm(loader):
-            images = images.to(device)
-            outputs = model(images)
-            _, predicted = torch.max(outputs, 1)
-            all_predictions.extend(predicted.cpu().numpy())
-            all_labels.extend(labels.numpy())
-            
-    all_predictions = np.array(all_predictions)
-    all_labels = np.array(all_labels)
-    
-    accuracy = 100 * np.sum(all_predictions == all_labels) / len(all_labels)
-    print(f"\n" + "="*30)
-    print(f" OVERALL ACCURACY: {accuracy:.2f}%")
-    print("="*30)
-    
-    print("\nClass-wise Accuracy:")
-    for i, emotion in enumerate(EMOTIONS):
-        mask = (all_labels == i)
-        if np.sum(mask) > 0:
-            class_acc = 100 * np.sum(all_predictions[mask] == all_labels[mask]) / np.sum(mask)
-            print(f"{emotion:10}: {class_acc:.2f}% ({np.sum(mask)} samples)")
+    loader = DataLoader(dataset, batch_size=1, shuffle=False)
+
+    results = {"AI": [], "HYBRID": [], "GT": []}
+    boosts = {"Sad": 0.85, "Angry": 0.55, "Happy": 0.05, "Fear": 0.10, "Surprise": 0.20, "Neutral": 0.10}
+
+    print("\nProcessing images...")
+    for images, labels in tqdm(loader):
+        img_tensor = images.to(device)
+        with torch.no_grad():
+            all_probs = torch.softmax(model(img_tensor), dim=1)[0].cpu().numpy()
+            ai_probs = all_probs[MODEL_MAP]
+
+        img_np = images[0].numpy().squeeze()
+        img_np = ((img_np * 0.5 + 0.5) * 255).astype(np.uint8)
+        img_rgb = cv2.cvtColor(img_np, cv2.COLOR_GRAY2RGB)
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=img_rgb)
+
+        detection_result = detector.detect(mp_image)
+        geo_guess = "Neutral"
+        if detection_result.face_landmarks:
+            landmarks = [(l.x, l.y) for l in detection_result.face_landmarks[0]]
+            geo_data = geo_detector.analyze(landmarks)
+            geo_guess = geo_data["guess"]
+
+        hybrid_probs = ai_probs.copy()
+        if geo_guess in boosts:
+            hybrid_probs[EMOTIONS.index(geo_guess)] += boosts[geo_guess]
+
+        final_emotion = EMOTIONS[np.argmax(hybrid_probs)]
+        if geo_guess == "Sad": final_emotion = "Sad"
+
+        gt_label = labels.item()
+        if gt_label == 1: continue
+
+        mapped_gt = gt_label if gt_label == 0 else gt_label - 1
+        if mapped_gt > 5: mapped_gt = 5
+
+        results["AI"].append(np.argmax(ai_probs))
+        results["HYBRID"].append(EMOTIONS.index(final_emotion))
+        results["GT"].append(mapped_gt)
+
+    ai_acc = 100 * np.sum(np.array(results["AI"]) == np.array(results["GT"])) / len(results["GT"])
+    hy_acc = 100 * np.sum(np.array(results["HYBRID"]) == np.array(results["GT"])) / len(results["GT"])
+
+    print(f"\n" + "="*40)
+    print(f" PURE AI ACCURACY:     {ai_acc:.2f}%")
+    print(f" HYBRID ACCURACY:      {hy_acc:.2f}%")
+    print(f" HYBRID IMPROVEMENT:   {hy_acc - ai_acc:+.2f}%")
+    print("="*40)
 
 if __name__ == "__main__":
-    analyze_model()
+    import cv2
+    analyze_hybrid()

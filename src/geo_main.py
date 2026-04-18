@@ -103,7 +103,10 @@ def main():
             cv2.putText(frame, emotion, (x_min + face_w//2 + emoji_target_w//2 + 10, emoji_y_offset + int(emoji_target_w * 0.8)), 1, 1.5, (0, 0, 0), 2)
 
         cv2.imshow('Geometric Only Detection', frame)
-        if cv2.waitKey(5) & 0xFF == ord('q'):
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord('q') or key == ord('Q') or key == 27:
+            break
+        if cv2.getWindowProperty('Geometric Only Detection', cv2.WND_PROP_VISIBLE) < 1:
             break
 
     cap.release()

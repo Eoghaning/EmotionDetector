@@ -114,7 +114,7 @@ def main():
             if face_crop.size > 0:
                 face_tensor = transform(face_crop).unsqueeze(0).to(device)
                 with torch.no_grad():
-                    all_probs = torch.softmax(model(face_tensor), dim=1)[0].cpu().numpy()
+                    all_probs = torch.softmax(model(face_tensor), dim=1)[0].detach().cpu().numpy()
                     ai_probs = all_probs[MODEL_MAP]
             else:
                 ai_probs = np.zeros(6)
@@ -183,7 +183,10 @@ def main():
                 cv2.circle(frame, (int(landmark.x * w), int(landmark.y * h)), 1, (0, 255, 0), -1)
 
         cv2.imshow('Emotion Detector - Hybrid System', frame)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord('q') or key == ord('Q') or key == 27:
+            break
+        if cv2.getWindowProperty('Emotion Detector - Hybrid System', cv2.WND_PROP_VISIBLE) < 1:
             break
 
     cap.release()

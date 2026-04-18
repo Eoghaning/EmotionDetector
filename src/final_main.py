@@ -51,7 +51,7 @@ def overlay_emoji(frame, emoji_dict, emotion, x_min, y_min, face_w, face_h=0):
 
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Final Filter Model Active. Applying strict thresholds.")
+    print(f"Final Model Active - 2 versions (main/stats)")
     
     model = EmotionResNet(num_classes=7, pretrained=False).to(device)
     if os.path.exists(MODEL_PATH):
@@ -111,7 +111,7 @@ def main():
             if face_crop.size > 0:
                 face_tensor = transform(face_crop).unsqueeze(0).to(device)
                 with torch.no_grad():
-                    all_probs = torch.softmax(model(face_tensor), dim=1)[0].cpu().numpy()
+                    all_probs = torch.softmax(model(face_tensor), dim=1)[0].detach().cpu().numpy()
                     ai_probs = all_probs[MODEL_MAP]
             else:
                 ai_probs = np.zeros(6)
@@ -128,44 +128,78 @@ def main():
             smooth_hybrid = np.mean(hybrid_buffer, axis=0)
             
             scores = {emo: smooth_hybrid[i] * 100 for i, emo in enumerate(EMOTIONS)}
-            met_emotions = {}
-            if scores["Fear"] >= 15: met_emotions["Fear"] = 15
-            if scores["Neutral"] >= 70: met_emotions["Neutral"] = scores["Neutral"]
-            if scores["Surprise"] >= 95: met_emotions["Surprise"] = scores["Surprise"]
-            if scores["Happy"] >= 55: met_emotions["Happy"] = scores["Happy"]
-            if scores["Sad"] >= 50: met_emotions["Sad"] = scores["Sad"]
-            if scores["Angry"] >= 50: met_emotions["Angry"] = scores["Angry"]
-            if scores["Angry"] >= 50 and scores["Neutral"] >= 50:
-                final_display_emo = "Angry"
-                final_display_score = scores["Angry"]
-            elif scores["Neutral"] >= 50:
+            if scores["Surprise"] >= 65:
+                final_display_emo = "Surprise"
+                final_display_score = scores["Surprise"]
+            elif scores["Happy"] >= 30:
+                final_display_emo = "Happy"
+                final_display_score = scores["Happy"]
+            elif scores["Sad"] >= 60:
+                final_display_emo = "Sad"
+                final_display_score = scores["Sad"]
+            elif scores["Fear"] >= 20:
+                final_display_emo = "Fear"
+                final_display_score = scores["Fear"]
+            elif scores["Neutral"] >= 70:
                 final_display_emo = "Neutral"
                 final_display_score = scores["Neutral"]
+            elif scores["Angry"] >= 48:
+                final_display_emo = "Angry"
+                final_display_score = scores["Angry"]
             else:
                 final_display_emo = "Neutral"
                 final_display_score = 0
-                if met_emotions:
-                    if len(met_emotions) == 2 and "Neutral" in met_emotions:
-                        del met_emotions["Neutral"]
-                    
-                    if "Fear" in met_emotions and len(met_emotions) > 1:
-                        for emo in list(met_emotions.keys()):
-                            if emo != "Fear":
-                                if (met_emotions["Fear"] * 3) > (met_emotions[emo] * 0.8):
-                                    del met_emotions[emo]
-                                else:
-                                    del met_emotions["Fear"]
-                                break
-                    if met_emotions:
-                        best_emo = max(met_emotions, key=met_emotions.get)
-                        final_display_emo = best_emo
-                        final_display_score = met_emotions[best_emo]
+            
+            face_area = face_w * (y_max - y_min)
+            frame_area = frame.shape[0] * frame.shape[1]
+            face_pct = (face_area / frame_area) * 100
+            
+            nose_tip = face_landmarks[1]
+            left_eye = face_landmarks[33]
+            right_eye = face_landmarks[263]
+            avg_eye_y = (left_eye.y + right_eye.y) / 2
+            head_tilt = (nose_tip.y - avg_eye_y) * 100
+            
+            avg_eye_x = (left_eye.x + right_eye.x) / 2
+            head_turn = (nose_tip.x - avg_eye_x) * 100
+            
+            in_range = (5.5 <= face_pct <= 13) and (5.75 <= head_tilt <= 8.25) and (-3 <= head_turn <= 3)
+            
             color = (0, 255, 255)
             cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), color, 2)
-            emoji_target_w, emoji_y_offset = overlay_emoji(frame, emoji_dict, final_display_emo, x_min, y_min, face_w)
-            cv2.putText(frame, final_display_emo, (x_min + face_w//2 + emoji_target_w//2 + 10, emoji_y_offset + int(emoji_target_w * 0.8)), 1, 1.5, (0, 0, 0), 2)
-        cv2.imshow('Final High-Confidence Model', frame)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
+            if in_range:
+                emoji_target_w, emoji_y_offset = overlay_emoji(frame, emoji_dict, final_display_emo, x_min, y_min, face_w)
+                cv2.putText(frame, final_display_emo, (x_min + face_w//2 + emoji_target_w//2 + 10, emoji_y_offset + int(emoji_target_w * 0.8)), 1, 1.5, (0, 0, 0), 2)
+            else:
+                adjust_msgs = []
+                if face_pct < 5.5:
+                    adjust_msgs.append("MOVE CLOSER")
+                elif face_pct > 13:
+                    adjust_msgs.append("MOVE BACK")
+                if head_tilt < 5.75:
+                    adjust_msgs.append("TILT HEAD DOWN")
+                elif head_tilt > 8.25:
+                    adjust_msgs.append("TILT HEAD UP")
+                if head_turn < -3:
+                    adjust_msgs.append("TURN HEAD LEFT")
+                elif head_turn > 3:
+                    adjust_msgs.append("TURN HEAD RIGHT")
+                adjust_text = " ".join(adjust_msgs)
+                text_w = cv2.getTextSize(adjust_text, 1, 2, 2)[0][0]
+                text_x = x_min + (face_w // 2) - (text_w // 2)
+                cv2.putText(frame, adjust_text, (text_x, y_min - 10), 1, 2, (0, 0, 0), 2)
+        if not detection_result.face_landmarks:
+                no_face_text = "No Face Detected"
+                text_w = cv2.getTextSize(no_face_text, 1, 2, 2)[0][0]
+                h, w, _ = frame.shape
+                text_x = (w // 2) - (text_w // 2)
+                text_y = (h // 2)
+                cv2.putText(frame, no_face_text, (text_x, text_y), 1, 2, (0, 0, 0), 2)
+        cv2.imshow('Final Model (main)', frame)
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord('q') or key == ord('Q') or key == 27:
+            break
+        if cv2.getWindowProperty('Final Model (main)', cv2.WND_PROP_VISIBLE) < 1:
             break
     cap.release()
     cv2.destroyAllWindows()

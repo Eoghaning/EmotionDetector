@@ -75,34 +75,37 @@ def main():
     prob_buffer = deque(maxlen=8)
     cap = cv2.VideoCapture(0)
     
-    with torch.no_grad():
-        while True:
-            ret, frame = cap.read()
-            if not ret: break
+    while True:
+        ret, frame = cap.read()
+        if not ret: break
+        
+        frame = cv2.flip(frame, 1)
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        faces = face_cascade.detectMultiScale(gray, 1.3, 5)
+        
+        for (x, y, w, h) in faces:
+            face_roi = gray[y:y+h, x:x+w]
+            face_tensor = transform(face_roi).unsqueeze(0).to(device)
             
-            frame = cv2.flip(frame, 1)
-            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            faces = face_cascade.detectMultiScale(gray, 1.3, 5)
+            all_probs = torch.softmax(model(face_tensor), dim=1)[0].detach().cpu().numpy()
+            ai_probs = all_probs[MODEL_MAP]
             
-            for (x, y, w, h) in faces:
-                face_roi = gray[y:y+h, x:x+w]
-                face_tensor = transform(face_roi).unsqueeze(0).to(device)
-                
-                all_probs = torch.softmax(model(face_tensor), dim=1)[0].cpu().numpy()
-                ai_probs = all_probs[MODEL_MAP]
-                
-                prob_buffer.append(ai_probs)
-                smoothed_probs = np.mean(prob_buffer, axis=0)
-                emotion_idx = np.argmax(smoothed_probs)
-                emotion = EMOTIONS[emotion_idx]
-                
-                color = (255, 0, 0) if emotion == "Sad" else (0, 255, 0)
-                cv2.rectangle(frame, (x, y), (x+w, y+h), color, 2)
-                emoji_target_w, emoji_y_offset = overlay_emoji(frame, emoji_dict, emotion, x, y, w)
-                cv2.putText(frame, emotion, (x + w//2 + emoji_target_w//2 + 10, emoji_y_offset + int(emoji_target_w * 0.8)), 1, 1.5, (0, 0, 0), 2)
+            prob_buffer.append(ai_probs)
+            smoothed_probs = np.mean(prob_buffer, axis=0)
+            emotion_idx = np.argmax(smoothed_probs)
+            emotion = EMOTIONS[emotion_idx]
+            
+            color = (255, 0, 0) if emotion == "Sad" else (0, 255, 0)
+            cv2.rectangle(frame, (x, y), (x+w, y+h), color, 2)
+            emoji_target_w, emoji_y_offset = overlay_emoji(frame, emoji_dict, emotion, x, y, w)
+            cv2.putText(frame, emotion, (x + w//2 + emoji_target_w//2 + 10, emoji_y_offset + int(emoji_target_w * 0.8)), 1, 1.5, (0, 0, 0), 2)
 
-            cv2.imshow("AI Emotion Detector (6-Emotion)", frame)
-            if cv2.waitKey(1) & 0xFF == ord('q'): break
+        cv2.imshow("AI Emotion Detector (6-Emotion)", frame)
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord('q') or key == ord('Q') or key == 27:
+            break
+        if cv2.getWindowProperty("AI Emotion Detector (6-Emotion)", cv2.WND_PROP_VISIBLE) < 1:
+            break
     cap.release()
     cv2.destroyAllWindows()
 

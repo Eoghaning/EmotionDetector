@@ -13,28 +13,30 @@ from src.config import DATA_PATH, MODEL_PATH, MODEL_INPUT_SIZE, NORM_MEAN, NORM_
 from src.dataset import FER2013Dataset
 from src.model import EmotionResNet
 
-BATCH_SIZE = 128
-EPOCHS = 50
-LEARNING_RATE = 0.0001
+BATCH_SIZE = 64
+EPOCHS = 30
+LEARNING_RATE = 0.00005
 NUM_CLASSES = 7
-TARGET_ACC = 67.00
+VAL_SPLIT = 0.15
 
-def main():
+def train_specialist():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Training on: {device}")
+    print(f"Using device: {device}")
 
     model = EmotionResNet(num_classes=NUM_CLASSES, pretrained=False).to(device)
     if os.path.exists(MODEL_PATH):
+        print(f"Loading current model to specialize on Sadness...")
         model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
+    else:
+        return
 
     train_transform = transforms.Compose([
         transforms.Resize(MODEL_INPUT_SIZE),
         transforms.RandomHorizontalFlip(),
-        transforms.RandomRotation(15),
-        transforms.RandomAffine(degrees=0, translate=(0.1, 0.1)),
+        transforms.RandomRotation(20),
         transforms.ToTensor(),
         transforms.Normalize(mean=NORM_MEAN, std=NORM_STD),
-        transforms.RandomErasing(p=0.1)
+        transforms.RandomErasing(p=0.2)
     ])
 
     val_transform = transforms.Compose([
@@ -44,8 +46,20 @@ def main():
     ])
 
     full_dataset = FER2013Dataset(DATA_PATH)
+
+    weights = np.ones(7)
+    weights[0] = 1.5
+    weights[1] = 0.0
+    weights[2] = 2.0
+    weights[3] = 0.5
+    weights[4] = 5.0
+    weights[5] = 0.5
+    weights[6] = 1.0
+
+    class_weights = torch.FloatTensor(weights).to(device)
+
     indices = list(range(len(full_dataset)))
-    split = int(np.floor(0.15 * len(full_dataset)))
+    split = int(np.floor(VAL_SPLIT * len(full_dataset)))
     np.random.seed(42)
     np.random.shuffle(indices)
     train_idx, val_idx = indices[split:], indices[:split]
@@ -55,30 +69,24 @@ def main():
     val_loader = DataLoader(FER2013Dataset(DATA_PATH, transform=val_transform),
                             batch_size=BATCH_SIZE, sampler=torch.utils.data.SubsetRandomSampler(val_idx))
 
-    labels = np.array([sample[1] for sample in full_dataset.samples])
-    class_counts = np.bincount(labels)
-    weights = 1. / (class_counts + 1e-6)
-    weights[1] = 0.0
-    weights[4] *= 2.0
-    weights = weights / weights.sum() * 7
-    class_weights = torch.FloatTensor(weights).to(device)
-
     criterion = nn.CrossEntropyLoss(weight=class_weights, label_smoothing=0.1)
-    optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=1e-2)
-    scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10)
+    optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=0.01)
 
-    best_val_acc = 0.0
+    best_val_acc = 66.58
+
+    print("\nStarting specialist training...")
+    print("Primary Focus: SADNESS | Disgust: REMOVED")
 
     for epoch in range(1, EPOCHS + 1):
         model.train()
-        for images, labels in tqdm(train_loader, desc=f"Epoch {epoch}/{EPOCHS}"):
+        pbar = tqdm(train_loader, desc=f"Epoch {epoch}/{EPOCHS}")
+        for images, labels in pbar:
             images, labels = images.to(device), labels.to(device)
             optimizer.zero_grad()
             outputs = model(images)
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
-            scheduler.step()
 
         model.eval()
         correct, total = 0, 0
@@ -93,13 +101,13 @@ def main():
                 correct += (predicted == labels).sum().item()
 
         val_acc = 100 * correct / total
-        print(f"Epoch {epoch} | Acc: {val_acc:.2f}%")
+        print(f"Epoch {epoch} | Val Acc: {val_acc:.2f}%")
 
         if val_acc > best_val_acc:
             best_val_acc = val_acc
             torch.save(model.state_dict(), MODEL_PATH)
-            if best_val_acc >= TARGET_ACC:
-                break
+
+    print(f"Specialization complete. Final best: {best_val_acc:.2f}%")
 
 if __name__ == '__main__':
-    main()
+    train_specialist()

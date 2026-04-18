@@ -109,7 +109,10 @@ def main():
                 cv2.circle(frame, (int(lx * w), int(ly * h)), 1, (0, 255, 0), -1)
 
         cv2.imshow('Geometric Only Detection', frame)
-        if cv2.waitKey(5) & 0xFF == ord('q'):
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord('q') or key == ord('Q') or key == 27:
+            break
+        if cv2.getWindowProperty('Geometric Only Detection', cv2.WND_PROP_VISIBLE) < 1:
             break
 
     cap.release()

@@ -8,9 +8,8 @@ MODEL_PATH = os.path.join(BASE_DIR, "models", "emotion_model.pth")
 EMOJI_DIR = os.path.join(BASE_DIR, "assets", "emojis")
 RECORDINGS_DIR = os.path.join(BASE_DIR, "recordings")
 
-EMOTIONS = ['Angry', 'Disgust', 'Fear', 'Happy', 'Sad', 'Surprise', 'Neutral']
+EMOTIONS = ['Angry', 'Fear', 'Happy', 'Sad', 'Surprise', 'Neutral']
 
-# Model Architecture Settings
 MODEL_INPUT_SIZE = (48, 48)
 NORM_MEAN = [0.5]
 NORM_STD = [0.5]
