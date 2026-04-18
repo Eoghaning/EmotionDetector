@@ -30,6 +30,7 @@ Create an accurate real-time facial emotion detection system that reliably ident
 - **Tool**: PyTorch CNN (EmotionResNet)
 - **Detection**: Haar Cascade (OpenCV)
 - **Approach**: Pure AI-based classification with temporal smoothing
+- **Dataset**: Trained on FER2013 dataset
 - **Use case**: Fast, lightweight emotion detection
 
 
