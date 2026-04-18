@@ -168,6 +168,24 @@ def main():
             color = (0, 255, 255)
             cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), color, 2)
             if in_range:
+                emoji_order = ['Happy', 'Sad', 'Angry', 'Surprise', 'Fear', 'Neutral']
+                small_emoji_w = int(face_w * 0.15)
+                total_width = small_emoji_w * 6
+                start_x = x_min + (face_w - total_width) // 2
+                for idx, emo in enumerate(emoji_order):
+                    emo_x = start_x + idx * small_emoji_w
+                    if emo in emoji_dict and emoji_dict[emo] is not None:
+                        small_emoji = cv2.resize(emoji_dict[emo], (small_emoji_w, small_emoji_w))
+                        y_emoji = y_min - small_emoji_w - 5
+                        if y_emoji >= 0:
+                            if small_emoji.shape[2] == 4:
+                                for c in range(3):
+                                    frame[y_emoji:y_emoji+small_emoji_w, emo_x:emo_x+small_emoji_w, c] = \
+                                        small_emoji[:,:,c] * (small_emoji[:,:,3]/255.0) + \
+                                        frame[y_emoji:y_emoji+small_emoji_w, emo_x:emo_x+small_emoji_w, c] * \
+                                        (1 - small_emoji[:,:,3]/255.0)
+                            else:
+                                frame[y_emoji:y_emoji+small_emoji_w, emo_x:emo_x+small_emoji_w] = small_emoji
                 emoji_target_w, emoji_y_offset = overlay_emoji(frame, emoji_dict, final_display_emo, x_min, y_min, face_w)
                 cv2.putText(frame, final_display_emo, (x_min + face_w//2 + emoji_target_w//2 + 10, emoji_y_offset + int(emoji_target_w * 0.8)), 1, 1.5, (0, 0, 0), 2)
             else:

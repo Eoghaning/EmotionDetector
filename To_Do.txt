@@ -1,27 +1,4 @@
+1.)  Online Availablity / Guide
+2.) User Testing     
+3.) Project Video
 
-1.) Commmit shit
-2.) Make sure all models work, final testing
-3.) Make sure descriptions are all up to date
-4.) Add Emojis to models
-5.) 8 total versions. 4 models 2 versions each, (1 clean and minimilistic, 1 giving the UI and stuff)
-
-6.) WebApp bascic
-7.) WebAPP Clean
-8.) AI Check + Skills
-9.) Final push
-10.) Netlify It
-
-11.) User Testing     X3
-12.) Documentation
-
-13.) Video document
-
-14.) Project Video
-
-Final Step:
-The closest thing to that (safe version)
-
-Run:
-git add -A
-git commit -m "Sync repo to current workspace"
-git push

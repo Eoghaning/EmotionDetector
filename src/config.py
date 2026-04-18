@@ -8,7 +8,7 @@ MODEL_PATH = os.path.join(BASE_DIR, "models", "emotion_model.pth")
 EMOJI_DIR = os.path.join(BASE_DIR, "assets", "emojis")
 RECORDINGS_DIR = os.path.join(BASE_DIR, "recordings")
 
-EMOTIONS = ['Angry', 'Fear', 'Happy', 'Sad', 'Surprise', 'Neutral']
+EMOTIONS = ['Happy', 'Sad', 'Angry', 'Surprise', 'Fear', 'Neutral']
 
 MODEL_INPUT_SIZE = (48, 48)
 NORM_MEAN = [0.5]
