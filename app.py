@@ -12,6 +12,8 @@ from mediapipe.tasks.python import vision
 import threading
 import PIL.Image
 import PIL.ImageTk
+import datetime
+from tkinter import filedialog
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from src.config import MODEL_PATH, EMOTIONS, MODEL_INPUT_SIZE, NORM_MEAN, NORM_STD, EMOJI_DIR
@@ -99,26 +101,18 @@ class EmotionApp(ctk.CTk):
         button_frame = ctk.CTkFrame(self)
         button_frame.grid(row=1, column=0, padx=20, pady=5, sticky="n")
 
-        # Layout: row 0 = Main modes, row 1 = Stats modes
-        # Columns: 0=Final, 1=Hybrid, 2=ML, 3=Geo
-        # internal_mode matches what process_frame uses:
-        #   7=Final Main, 8=Final Stats
-        #   5=Hybrid Main, 6=Hybrid Stats
-        #   1=ML Main,    2=ML Stats
-        #   3=Geo Main,   4=Geo Stats
         self.btn_layout = [
-            # (grid_row, grid_col, label, internal_mode, is_final)
-            (0, 0, "Final Main",   7, True),
-            (0, 1, "Hybrid Main",  5, False),
-            (0, 2, "ML Main",      1, False),
-            (0, 3, "Geo Main",     3, False),
-            (1, 0, "Final Stats",  8, True),
+            (0, 2, "Final Main",   7, True),
+            (0, 3, "Final Stats",  8, True),
+            (1, 0, "Hybrid Main",  5, False),
             (1, 1, "Hybrid Stats", 6, False),
-            (1, 2, "ML Stats",     2, False),
-            (1, 3, "Geo Stats",    4, False),
+            (1, 2, "ML Main",      1, False),
+            (1, 3, "ML Stats",     2, False),
+            (1, 4, "Geo Main",     3, False),
+            (1, 5, "Geo Stats",    4, False),
         ]
 
-        self.buttons = {}  # internal_mode -> button widget
+        self.buttons = {}
 
         for (row, col, label, internal_mode, is_final) in self.btn_layout:
             if is_final:
@@ -167,7 +161,7 @@ class EmotionApp(ctk.CTk):
         
         self.capture_btn = ctk.CTkButton(
             controls_frame,
-            text="Capture & Analyze",
+            text="📷 Photo",
             command=self.capture_frame,
             width=200,
             height=40,
@@ -198,14 +192,12 @@ class EmotionApp(ctk.CTk):
         return names.get(internal_mode, str(internal_mode))
 
     def _refresh_button_states(self):
-        """Update all button appearances: highlight active button, keep finals distinct."""
         final_modes = {7, 8}
         for internal_mode, btn in self.buttons.items():
             is_final = internal_mode in final_modes
             is_active = internal_mode == self.current_mode
 
             if is_active:
-                # Bright white border highlight for the selected button
                 btn.configure(
                     border_width=3,
                     border_color="#FFFFFF",
@@ -213,7 +205,6 @@ class EmotionApp(ctk.CTk):
                     hover_color="#2D89D0" if is_final else "#4A4A8A"
                 )
             elif is_final:
-                # Final buttons: distinct blue, subtle grey border
                 btn.configure(
                     border_width=2,
                     border_color="#AAAAAA",
@@ -221,7 +212,6 @@ class EmotionApp(ctk.CTk):
                     hover_color="#2D89D0"
                 )
             else:
-                # Normal inactive buttons: dark, invisible border
                 btn.configure(
                     border_width=2,
                     border_color="#2B2B2B",
@@ -424,14 +414,14 @@ class EmotionApp(ctk.CTk):
                 cv2.circle(display, (int(landmark.x * w), int(landmark.y * h)), 1, (0, 255, 0), -1)
                 
         elif mode == 7:
-            cv2.rectangle(display, (x_min, y_min), (x_max, y_max), (0, 255, 255), 2)
+            cv2.rectangle(display, (x_min, y_min), (x_max, y_max), (0, 255, 255), 3)
             self.overlay_emoji(display, final_display_emo, x_min, y_min, face_w)
-            cv2.putText(display, f"[{mode_names[mode]}] {final_display_emo} ({final_display_score:.0f}%)", (x_min, y_min - 10), 1, 1, (0, 255, 255), 2)
-            
+            cv2.putText(display, f"[{mode_names[mode]}] {final_display_emo} ({final_display_score:.0f}%)", (x_min, y_min - 10), 1, 1.2, (0, 255, 255), 3)
+
         elif mode == 8:
-            cv2.rectangle(display, (x_min, y_min), (x_max, y_max), (0, 255, 255), 2)
+            cv2.rectangle(display, (x_min, y_min), (x_max, y_max), (0, 255, 255), 3)
             self.overlay_emoji(display, final_display_emo, x_min, y_min, face_w)
-            cv2.putText(display, f"[{mode_names[mode]}] {final_display_emo} ({final_display_score:.0f}%)", (x_min, y_min - 10), 1, 1, (0, 255, 255), 2)
+            cv2.putText(display, f"[{mode_names[mode]}] {final_display_emo} ({final_display_score:.0f}%)", (x_min, y_min - 10), 1, 1.2, (0, 255, 255), 3)
             
             cv2.putText(display, f"Dist: {face_pct:.1f}%", (10, 30), 1, 0.8, (0, 0, 0), 1)
             cv2.putText(display, f"F/B: {head_tilt:.1f}%", (10, 50), 1, 0.8, (0, 0, 0), 1)
@@ -490,17 +480,47 @@ class EmotionApp(ctk.CTk):
 
     def capture_frame(self):
         ret, frame = self.cap.read()
-        if ret:
-            frame = cv2.flip(frame, 1)
-            display = self.process_frame(frame, self.current_mode)
-            
-            display = cv2.cvtColor(display, cv2.COLOR_BGR2RGB)
-            display = cv2.resize(display, (640, 480))
-            
-            photo = PIL.Image.fromarray(display)
-            photo = PIL.ImageTk.PhotoImage(photo)
-            self.video_label.configure(image=photo)
-            self.video_label.image = photo
+        if not ret:
+            return
+
+        frame = cv2.flip(frame, 1)
+        display = self.process_frame(frame, self.current_mode)
+
+        # Default filename with timestamp, e.g. "emotion_20260419_143022.jpg"
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        default_name = f"emotion_{timestamp}.jpg"
+
+        # Open in ~/Pictures if it exists, otherwise ~/
+        pictures_dir = os.path.join(os.path.expanduser("~"), "Pictures")
+        if not os.path.isdir(pictures_dir):
+            pictures_dir = os.path.expanduser("~")
+
+        filepath = filedialog.asksaveasfilename(
+            parent=self,
+            title="Save photo",
+            initialdir=pictures_dir,
+            initialfile=default_name,
+            defaultextension=".jpg",
+            filetypes=[
+                ("JPEG image", "*.jpg *.jpeg"),
+                ("PNG image", "*.png"),
+                ("All files", "*.*"),
+            ],
+        )
+
+        if not filepath:
+            return  # User cancelled
+
+        cv2.imwrite(filepath, display)
+        print(f"Photo saved: {filepath}")
+
+        # Update preview to show the captured frame
+        display_rgb = cv2.cvtColor(display, cv2.COLOR_BGR2RGB)
+        display_rgb = cv2.resize(display_rgb, (640, 480))
+        photo = PIL.Image.fromarray(display_rgb)
+        photo = PIL.ImageTk.PhotoImage(photo)
+        self.video_label.configure(image=photo)
+        self.video_label.image = photo
 
     def on_closing(self):
         self.running = False
