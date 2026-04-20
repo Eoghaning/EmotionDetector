@@ -141,7 +141,7 @@ class EmotionApp(ctk.CTk):
         # Gear / advanced toggle — same width as the two Final buttons combined
         # 200 + 12 (inner gap) + 200 = 412
         gear_wrapper = ctk.CTkFrame(self, fg_color="transparent")
-        gear_wrapper.grid(row=2, column=0, pady=(0, 4))
+        gear_wrapper.grid(row=2, column=0, pady=(12, 4))
         self.gear_btn = ctk.CTkButton(
             gear_wrapper, text="Additional Model Settings  ⚙  →",
             command=self._toggle_advanced,
@@ -183,16 +183,21 @@ class EmotionApp(ctk.CTk):
         self.advanced_frame.grid_remove()
 
         # Mode label - with extra top padding to leave gap for expanded settings
+        mode_panel = ctk.CTkFrame(self, corner_radius=10, border_width=2, border_color="#444444")
+        mode_panel.grid(row=4, column=0, pady=(20, 2), padx=20)
+        
         self.mode_label = ctk.CTkLabel(
-            self,
+            mode_panel,
             text=f"Current Mode: {self._mode_name(self.current_mode)}",
-            font=ctk.CTkFont(size=15)
+            font=ctk.CTkFont(size=15, weight="bold")
         )
-        self.mode_label.grid(row=4, column=0, pady=(20, 2))
+        self.mode_label.pack(padx=16, pady=8)
 
-        # Video feed
-        self.video_label = ctk.CTkLabel(self, text="")
-        self.video_label.grid(row=5, column=0, padx=20, pady=(2, 0))
+        # Video feed with border
+        video_frame = ctk.CTkFrame(self, corner_radius=10, border_width=2, border_color="#444444")
+        video_frame.grid(row=5, column=0, padx=20, pady=(2, 0))
+        self.video_label = ctk.CTkLabel(video_frame, text="")
+        self.video_label.pack(padx=5, pady=5)
 
         # Emoji reference panel — bordered card with title and labels below each emoji
         emoji_panel = ctk.CTkFrame(self, corner_radius=10, border_width=2, border_color="#444444")
@@ -221,19 +226,23 @@ class EmotionApp(ctk.CTk):
         controls_frame = ctk.CTkFrame(self, fg_color="transparent")
         controls_frame.grid(row=7, column=0, pady=(4, 12))
 
-        ctk.CTkButton(
+        photo_btn = ctk.CTkButton(
             controls_frame, text="📷 Photo",
             command=self.capture_frame,
             width=200, height=40, font=ctk.CTkFont(size=16, weight="bold"),
             fg_color="#1F6AA5", hover_color="#2D89D0",
-        ).pack(side="left", padx=8)
+            border_width=2, border_color="#444444", corner_radius=10,
+        )
+        photo_btn.pack(side="left", padx=8)
 
-        ctk.CTkButton(
+        quit_btn = ctk.CTkButton(
             controls_frame, text="Quit",
             command=self.on_closing,
             width=200, height=40, font=ctk.CTkFont(size=16, weight="bold"),
             fg_color="#8B0000", hover_color="#B22222",
-        ).pack(side="left", padx=8)
+            border_width=2, border_color="#444444", corner_radius=10,
+        )
+        quit_btn.pack(side="left", padx=8)
 
         self._refresh_button_states()
 
@@ -258,15 +267,16 @@ class EmotionApp(ctk.CTk):
         for imode, btn in [(7, self.btn_final_main), (8, self.btn_final_stats)]:
             active = imode == self.current_mode
             btn.configure(
-                border_width=3 if active else 2,
-                border_color="#FFFFFF" if active else "#AAAAAA",
+                border_width=4 if active else 2,
+                border_color="#00FF00" if active else "#AAAAAA",
+                fg_color="#228B22" if active else "#1F6AA5",
             )
         for imode, btn in self.adv_buttons.items():
             active = imode == self.current_mode
             btn.configure(
-                border_width=3 if active else 2,
-                border_color="#FFFFFF" if active else "#AAAAAA",
-                fg_color="#1F6AA5" if not active else "#1F6AA5",
+                border_width=4 if active else 2,
+                border_color="#00FF00" if active else "#AAAAAA",
+                fg_color="#228B22" if active else "#1F6AA5",
                 hover_color="#2D89D0",
             )
 
@@ -278,13 +288,13 @@ class EmotionApp(ctk.CTk):
 
     def overlay_emoji(self, frame, emotion, x_min, y_min, face_w):
         if emotion not in self.emoji_dict or self.emoji_dict[emotion] is None:
-            return
+            return 0, 0
         emoji = self.emoji_dict[emotion]
         emoji_h, emoji_w = emoji.shape[:2]
         target_w = int(face_w * 0.8)
         target_h = int(emoji_h * (target_w / emoji_w))
         emoji_resized = cv2.resize(emoji, (target_w, target_h))
-        y_offset = max(0, y_min - target_h - 5)
+        y_offset = max(0, y_min - target_h - 25)
         x_offset = x_min + face_w // 2 - target_w // 2
         if y_offset + target_h > frame.shape[0]:
             y_offset = max(0, frame.shape[0] - target_h)
@@ -301,6 +311,7 @@ class EmotionApp(ctk.CTk):
                 )
         else:
             frame[y_offset:y_offset+target_h, x_offset:x_offset+target_w] = emoji_resized
+        return target_w, y_offset
 
     def process_frame(self, frame, mode):
         if self.detector is None:
@@ -314,7 +325,11 @@ class EmotionApp(ctk.CTk):
         detection_result = self.detector.detect(mp_image)
 
         if not detection_result.face_landmarks:
-            cv2.putText(display, "No Face Detected", (w//2 - 80, h//2), 1, 2, (0, 0, 0), 2)
+            text = "No Face Detected"
+            text_size = cv2.getTextSize(text, 1, 2, 2)[0]
+            text_x = (w - text_size[0]) // 2
+            text_y = (h + text_size[1]) // 2
+            cv2.putText(display, text, (text_x, text_y), 1, 2, (0, 0, 0), 2)
             return display
 
         face_landmarks = detection_result.face_landmarks[0]
@@ -403,13 +418,19 @@ class EmotionApp(ctk.CTk):
 
         if mode == 1:
             cv2.rectangle(display, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
-            self.overlay_emoji(display, ai_emotion, x_min, y_min, face_w)
-            cv2.putText(display, f"[{mode_names[mode]}] {ai_emotion}", (x_min, y_min - 10), 1, 1, (0, 255, 0), 2)
+            emoji_w, emoji_y = self.overlay_emoji(display, ai_emotion, x_min, y_min, face_w)
+            cv2.putText(display, f"[{mode_names[mode]}]", (x_min, y_min - 10), 1, 0.9, (0, 255, 0), 2)
+            text_x = x_min + face_w + 10
+            text_y = emoji_y + emoji_w // 2 + 5
+            cv2.putText(display, f"{ai_emotion}", (text_x, text_y), 1, 1.2, (0, 255, 0), 3)
 
         elif mode == 2:
             cv2.rectangle(display, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
-            self.overlay_emoji(display, ai_emotion, x_min, y_min, face_w)
-            cv2.putText(display, f"[{mode_names[mode]}] {ai_emotion}", (x_min, y_min - 10), 1, 1, (0, 255, 0), 2)
+            emoji_w, emoji_y = self.overlay_emoji(display, ai_emotion, x_min, y_min, face_w)
+            cv2.putText(display, f"[{mode_names[mode]}]", (x_min, y_min - 10), 1, 0.9, (0, 255, 0), 2)
+            text_x = x_min + face_w + 10
+            text_y = emoji_y + emoji_w // 2 + 5
+            cv2.putText(display, f"{ai_emotion}", (text_x, text_y), 1, 1.2, (0, 255, 0), 3)
             bar_y = y_max + 10
             bar_w = max(20, face_w // 8)
             for i, (prob, em) in enumerate(zip(smooth_ai, EMOTIONS)):
@@ -420,13 +441,19 @@ class EmotionApp(ctk.CTk):
 
         elif mode == 3:
             cv2.rectangle(display, (x_min, y_min), (x_max, y_max), (0, 255, 255), 2)
-            self.overlay_emoji(display, geo_guess, x_min, y_min, face_w)
-            cv2.putText(display, f"[{mode_names[mode]}] {geo_guess}", (x_min, y_min - 10), 1, 1, (0, 255, 255), 2)
+            emoji_w, emoji_y = self.overlay_emoji(display, geo_guess, x_min, y_min, face_w)
+            cv2.putText(display, f"[{mode_names[mode]}]", (x_min, y_min - 10), 1, 0.9, (0, 255, 255), 2)
+            text_x = x_min + face_w + 10
+            text_y = emoji_y + emoji_w // 2 + 5
+            cv2.putText(display, f"{geo_guess}", (text_x, text_y), 1, 1.2, (0, 255, 255), 3)
 
         elif mode == 4:
             cv2.rectangle(display, (x_min, y_min), (x_max, y_max), (0, 255, 255), 2)
-            self.overlay_emoji(display, geo_guess, x_min, y_min, face_w)
-            cv2.putText(display, f"[{mode_names[mode]}] {geo_guess}", (x_min, y_min - 10), 1, 1, (0, 255, 255), 2)
+            emoji_w, emoji_y = self.overlay_emoji(display, geo_guess, x_min, y_min, face_w)
+            cv2.putText(display, f"[{mode_names[mode]}]", (x_min, y_min - 10), 1, 0.9, (0, 255, 255), 2)
+            text_x = x_min + face_w + 10
+            text_y = emoji_y + emoji_w // 2 + 5
+            cv2.putText(display, f"{geo_guess}", (text_x, text_y), 1, 1.2, (0, 255, 255), 3)
             if geo_data:
                 cv2.putText(display, f"MAR: {geo_data['mar']:.2f}", (10, 30), 1, 0.8, (0, 0, 0), 1)
                 cv2.putText(display, f"Curv: {geo_data['curvature']:.4f}", (10, 50), 1, 0.8, (0, 0, 0), 1)
@@ -435,13 +462,19 @@ class EmotionApp(ctk.CTk):
 
         elif mode == 5:
             cv2.rectangle(display, (x_min, y_min), (x_max, y_max), (255, 0, 0), 2)
-            self.overlay_emoji(display, hybrid_emotion, x_min, y_min, face_w)
-            cv2.putText(display, f"[{mode_names[mode]}] {hybrid_emotion}", (x_min, y_min - 10), 1, 1, (255, 0, 0), 2)
+            emoji_w, emoji_y = self.overlay_emoji(display, hybrid_emotion, x_min, y_min, face_w)
+            cv2.putText(display, f"[{mode_names[mode]}]", (x_min, y_min - 10), 1, 0.9, (255, 0, 0), 2)
+            text_x = x_min + face_w + 10
+            text_y = emoji_y + emoji_w // 2 + 5
+            cv2.putText(display, f"{hybrid_emotion}", (text_x, text_y), 1, 1.2, (255, 0, 0), 3)
 
         elif mode == 6:
             cv2.rectangle(display, (x_min, y_min), (x_max, y_max), (255, 0, 0), 2)
-            self.overlay_emoji(display, hybrid_emotion, x_min, y_min, face_w)
-            cv2.putText(display, f"[{mode_names[mode]}] {hybrid_emotion}", (x_min, y_min - 10), 1, 1, (255, 0, 0), 2)
+            emoji_w, emoji_y = self.overlay_emoji(display, hybrid_emotion, x_min, y_min, face_w)
+            cv2.putText(display, f"[{mode_names[mode]}]", (x_min, y_min - 10), 1, 0.9, (255, 0, 0), 2)
+            text_x = x_min + face_w + 10
+            text_y = emoji_y + emoji_w // 2 + 5
+            cv2.putText(display, f"{hybrid_emotion}", (text_x, text_y), 1, 1.2, (255, 0, 0), 3)
 
             bw = max(8, face_w // 20)
             bh_max = max(20, face_w // 6)
@@ -472,50 +505,76 @@ class EmotionApp(ctk.CTk):
 
         elif mode == 7:
             cv2.rectangle(display, (x_min, y_min), (x_max, y_max), (0, 255, 255), 3)
-            self.overlay_emoji(display, final_display_emo, x_min, y_min, face_w)
-            cv2.putText(display, f"[{mode_names[mode]}] {final_display_emo} ({final_display_score:.0f}%)",
-                        (x_min, y_min - 10), 1, 1.2, (0, 255, 255), 3)
+            in_range = (5.5 <= face_pct <= 13) and (5.5 <= head_tilt <= 8) and (-3 <= head_turn <= 3)
+            if in_range:
+                emoji_w, emoji_y = self.overlay_emoji(display, final_display_emo, x_min, y_min, face_w)
+                cv2.putText(display, f"[{mode_names[mode]}]", (x_min, y_min - 10), 1, 0.9, (0, 255, 255), 2)
+                text_x = x_min + face_w + 10
+                text_y = emoji_y + emoji_w // 2 + 5
+                cv2.putText(display, f"{final_display_emo}", (text_x, text_y), 1, 1.2, (0, 255, 255), 3)
+                cv2.putText(display, f"({final_display_score:.0f}%)", (text_x, text_y + 24), 1, 0.9, (0, 255, 255), 2)
+            else:
+                adjust_msgs = []
+                if face_pct < 5.5:
+                    adjust_msgs.append("Move Head Closer")
+                elif face_pct > 13:
+                    adjust_msgs.append("Move Head Further")
+                if head_tilt < 5.5:
+                    adjust_msgs.append("Tilt Head Down")
+                elif head_tilt > 8:
+                    adjust_msgs.append("Tilt Head Up")
+                if head_turn < -3:
+                    adjust_msgs.append("Tilt Head Left")
+                elif head_turn > 3:
+                    adjust_msgs.append("Tilt Head Right")
+                adjust_text = " and ".join(adjust_msgs)
+                text_w = cv2.getTextSize(adjust_text, 1, 1.0, 2)[0][0]
+                text_x = x_min + (face_w // 2) - (text_w // 2)
+                cv2.putText(display, adjust_text, (text_x, y_min - 10), 1, 1.0, (0, 0, 255), 2)
 
         elif mode == 8:
             cv2.rectangle(display, (x_min, y_min), (x_max, y_max), (0, 255, 255), 3)
-            self.overlay_emoji(display, final_display_emo, x_min, y_min, face_w)
-            cv2.putText(display, f"[{mode_names[mode]}] {final_display_emo} ({final_display_score:.0f}%)",
-                        (x_min, y_min - 10), 1, 1.2, (0, 255, 255), 3)
-
-            cv2.putText(display, f"Dist: {face_pct:.1f}%", (10, 30), 1, 0.8, (0, 0, 0), 1)
-            cv2.putText(display, f"F/B: {head_tilt:.1f}%", (10, 50), 1, 0.8, (0, 0, 0), 1)
-            cv2.putText(display, f"L/R: {head_turn:.1f}%", (10, 70), 1, 0.8, (0, 0, 0), 1)
-
-            thresholds = {"Happy": 15, "Sad": 75, "Angry": 60, "Surprise": 65, "Fear": 20, "Neutral": 70}
-            for i, emo in enumerate(EMOTIONS):
-                score = scores[emo]
-                target = thresholds.get(emo, 0)
-                color = (0, 255, 0) if score >= target else (0, 0, 255)
-                cv2.putText(display, f"{emo}: {score:.0f}/{target}",
-                            (x_max + 10, y_min + 20 + i*22), 1, 0.7, color, 1)
-
-            for landmark in face_landmarks:
-                cv2.circle(display, (int(landmark.x * w), int(landmark.y * h)), 1, (0, 255, 0), -1)
-
             in_range = (5.5 <= face_pct <= 13) and (5.5 <= head_tilt <= 8) and (-3 <= head_turn <= 3)
-            if not in_range:
+            if in_range:
+                emoji_w, emoji_y = self.overlay_emoji(display, final_display_emo, x_min, y_min, face_w)
+                cv2.putText(display, f"[{mode_names[mode]}]", (x_min, y_min - 10), 1, 0.9, (0, 255, 255), 2)
+                text_x = x_min + face_w + 10
+                text_y = emoji_y + emoji_w // 2 + 5
+                cv2.putText(display, f"{final_display_emo}", (text_x, text_y), 1, 1.2, (0, 255, 255), 3)
+                cv2.putText(display, f"({final_display_score:.0f}%)", (text_x, text_y + 24), 1, 0.9, (0, 255, 255), 2)
+
+                cv2.putText(display, f"Dist: {face_pct:.1f}%", (10, 30), 1, 0.8, (0, 0, 0), 1)
+                cv2.putText(display, f"F/B: {head_tilt:.1f}%", (10, 50), 1, 0.8, (0, 0, 0), 1)
+                cv2.putText(display, f"L/R: {head_turn:.1f}%", (10, 70), 1, 0.8, (0, 0, 0), 1)
+
+                thresholds = {"Happy": 15, "Sad": 75, "Angry": 60, "Surprise": 65, "Fear": 20, "Neutral": 70}
+                for i, emo in enumerate(EMOTIONS):
+                    score = scores[emo]
+                    target = thresholds.get(emo, 0)
+                    color = (0, 255, 0) if score >= target else (0, 0, 255)
+                    cv2.putText(display, f"{emo}: {score:.0f}/{target}",
+                                (x_max + 10, y_min + 20 + i*22), 1, 0.7, color, 1)
+
+                for landmark in face_landmarks:
+                    cv2.circle(display, (int(landmark.x * w), int(landmark.y * h)), 1, (0, 255, 0), -1)
+            else:
                 adjust_msgs = []
                 if face_pct < 5.5:
-                    adjust_msgs.append("CLOSE")
+                    adjust_msgs.append("Move Head Closer")
                 elif face_pct > 13:
-                    adjust_msgs.append("BACK")
+                    adjust_msgs.append("Move Head Further")
                 if head_tilt < 5.5:
-                    adjust_msgs.append("DOWN")
+                    adjust_msgs.append("Tilt Head Down")
                 elif head_tilt > 8:
-                    adjust_msgs.append("UP")
+                    adjust_msgs.append("Tilt Head Up")
                 if head_turn < -3:
-                    adjust_msgs.append("LEFT")
+                    adjust_msgs.append("Tilt Head Left")
                 elif head_turn > 3:
-                    adjust_msgs.append("RIGHT")
-                adjust_text = " ".join(adjust_msgs)
-                text_w = cv2.getTextSize(adjust_text, 1, 1.5, 2)[0][0]
+                    adjust_msgs.append("Tilt Head Right")
+                adjust_text = " and ".join(adjust_msgs)
+                text_w = cv2.getTextSize(adjust_text, 1, 1.0, 2)[0][0]
                 text_x = x_min + (face_w // 2) - (text_w // 2)
-                cv2.putText(display, adjust_text, (text_x, y_min - 10), 1, 1.5, (0, 0, 255), 2)
+                cv2.putText(display, adjust_text, (text_x, y_min - 10), 1, 1.0, (0, 0, 255), 2)
 
         return display
 
