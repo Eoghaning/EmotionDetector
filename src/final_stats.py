@@ -226,7 +226,7 @@ def main():
                 h, w, _ = frame.shape
                 text_x = (w // 2) - (text_w // 2)
                 text_y = (h // 2)
-cv2.putText(frame, no_face_text, (text_x, text_y), 1, 2, (0, 0, 0), 2)
+                cv2.putText(frame, no_face_text, (text_x, text_y), 1, 2, (0, 0, 0), 2)
         
         h, w = frame.shape[:2]
         if h >= 60 and w >= 320:
