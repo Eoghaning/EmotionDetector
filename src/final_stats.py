@@ -131,19 +131,19 @@ def main():
             if scores["Surprise"] >= 65:
                 final_display_emo = "Surprise"
                 final_display_score = scores["Surprise"]
-            elif scores["Happy"] >= 30:
+            elif scores["Happy"] >= 15:
                 final_display_emo = "Happy"
                 final_display_score = scores["Happy"]
-            elif scores["Sad"] >= 60:
+            elif scores["Sad"] >= 75:
                 final_display_emo = "Sad"
                 final_display_score = scores["Sad"]
-            elif scores["Fear"] >= 20:
+            elif scores["Fear"] >= 10:
                 final_display_emo = "Fear"
                 final_display_score = scores["Fear"]
             elif scores["Neutral"] >= 70:
                 final_display_emo = "Neutral"
                 final_display_score = scores["Neutral"]
-            elif scores["Angry"] >= 48:
+            elif scores["Angry"] >= 60:
                 final_display_emo = "Angry"
                 final_display_score = scores["Angry"]
             else:
@@ -229,7 +229,7 @@ def main():
                 text_x = x_min + (face_w // 2) - (text_w // 2)
                 cv2.putText(frame, adjust_text, (text_x, y_min - 10), 1, 2, (0, 0, 0), 2)
             
-            thresholds = {"Happy": 30, "Sad": 60, "Angry": 48, "Surprise": 65, "Fear": 20, "Neutral": 70}
+            thresholds = {"Happy": 15, "Sad": 75, "Angry": 60, "Surprise": 65, "Fear": 10, "Neutral": 70}
             for i, emo in enumerate(EMOTIONS):
                 score = scores[emo]
                 disp_score = score

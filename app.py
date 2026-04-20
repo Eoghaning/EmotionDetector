@@ -318,19 +318,19 @@ class EmotionApp(ctk.CTk):
         if scores["Surprise"] >= 65:
             final_display_emo = "Surprise"
             final_display_score = scores["Surprise"]
-        elif scores["Happy"] >= 30:
+        elif scores["Happy"] >= 15:
             final_display_emo = "Happy"
             final_display_score = scores["Happy"]
-        elif scores["Sad"] >= 60:
+        elif scores["Sad"] >= 75:
             final_display_emo = "Sad"
             final_display_score = scores["Sad"]
-        elif scores["Fear"] >= 20:
+        elif scores["Fear"] >= 10:
             final_display_emo = "Fear"
             final_display_score = scores["Fear"]
         elif scores["Neutral"] >= 70:
             final_display_emo = "Neutral"
             final_display_score = scores["Neutral"]
-        elif scores["Angry"] >= 48:
+        elif scores["Angry"] >= 60:
             final_display_emo = "Angry"
             final_display_score = scores["Angry"]
         
@@ -427,7 +427,7 @@ class EmotionApp(ctk.CTk):
             cv2.putText(display, f"F/B: {head_tilt:.1f}%", (10, 50), 1, 0.8, (0, 0, 0), 1)
             cv2.putText(display, f"L/R: {head_turn:.1f}%", (10, 70), 1, 0.8, (0, 0, 0), 1)
             
-            thresholds = {"Happy": 30, "Sad": 60, "Angry": 48, "Surprise": 65, "Fear": 20, "Neutral": 70}
+            thresholds = {"Happy": 15, "Sad": 75, "Angry": 60, "Surprise": 65, "Fear": 10, "Neutral": 70}
             for i, emo in enumerate(EMOTIONS):
                 score = scores[emo]
                 target = thresholds.get(emo, 0)
