@@ -131,10 +131,10 @@ def main():
             if scores["Surprise"] >= 65:
                 final_display_emo = "Surprise"
                 final_display_score = scores["Surprise"]
-            elif scores["Happy"] >= 30:
+            elif scores["Happy"] >= 15:
                 final_display_emo = "Happy"
                 final_display_score = scores["Happy"]
-            elif scores["Sad"] >= 60:
+            elif scores["Sad"] >= 75:
                 final_display_emo = "Sad"
                 final_display_score = scores["Sad"]
             elif scores["Fear"] >= 20:
@@ -143,7 +143,7 @@ def main():
             elif scores["Neutral"] >= 70:
                 final_display_emo = "Neutral"
                 final_display_score = scores["Neutral"]
-            elif scores["Angry"] >= 48:
+            elif scores["Angry"] >= 60:
                 final_display_emo = "Angry"
                 final_display_score = scores["Angry"]
             else:
@@ -163,7 +163,7 @@ def main():
             avg_eye_x = (left_eye.x + right_eye.x) / 2
             head_turn = (nose_tip.x - avg_eye_x) * 100
             
-            in_range = (5.5 <= face_pct <= 13) and (5.75 <= head_tilt <= 8.25) and (-3 <= head_turn <= 3)
+            in_range = (5.5 <= face_pct <= 13) and (5.5 <= head_tilt <= 8) and (-3 <= head_turn <= 3)
             
             color = (0, 255, 255)
             cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), color, 2)
@@ -194,9 +194,9 @@ def main():
                     adjust_msgs.append("MOVE CLOSER")
                 elif face_pct > 13:
                     adjust_msgs.append("MOVE BACK")
-                if head_tilt < 5.75:
+                if head_tilt < 5.5:
                     adjust_msgs.append("TILT HEAD DOWN")
-                elif head_tilt > 8.25:
+                elif head_tilt > 8:
                     adjust_msgs.append("TILT HEAD UP")
                 if head_turn < -3:
                     adjust_msgs.append("TURN HEAD LEFT")

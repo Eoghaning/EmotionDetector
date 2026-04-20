@@ -137,7 +137,7 @@ def main():
             elif scores["Sad"] >= 75:
                 final_display_emo = "Sad"
                 final_display_score = scores["Sad"]
-            elif scores["Fear"] >= 10:
+            elif scores["Fear"] >= 20:
                 final_display_emo = "Fear"
                 final_display_score = scores["Fear"]
             elif scores["Neutral"] >= 70:
@@ -167,9 +167,9 @@ def main():
             avg_eye_y = (left_eye.y + right_eye.y) / 2
             head_tilt = (nose_tip.y - avg_eye_y) * 100
             
-            if head_tilt < 5.75:
+            if head_tilt < 5.5:
                 tilt_text = f"F/B: {head_tilt:.1f}% (TILT HEAD DOWN)"
-            elif head_tilt > 8.25:
+            elif head_tilt > 8:
                 tilt_text = f"F/B: {head_tilt:.1f}% (TILT HEAD UP)"
             else:
                 tilt_text = f"F/B: {head_tilt:.1f}%"
@@ -185,29 +185,11 @@ def main():
                 turn_text = f"L/R: {head_turn:.1f}%"
             cv2.putText(frame, turn_text, (10, 70), 1, 1, (0, 0, 0), 1)
             
-            in_range = (5.5 <= face_pct <= 13) and (5.75 <= head_tilt <= 8.25) and (-3 <= head_turn <= 3)
+            in_range = (5.5 <= face_pct <= 13) and (5.5 <= head_tilt <= 8) and (-3 <= head_turn <= 3)
             
             color = (0, 255, 255)
             cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), color, 2)
             if in_range:
-                emoji_order = ['Happy', 'Sad', 'Angry', 'Surprise', 'Fear', 'Neutral']
-                small_emoji_w = int(face_w * 0.15)
-                total_width = small_emoji_w * 6
-                start_x = x_min + (face_w - total_width) // 2
-                for idx, emo in enumerate(emoji_order):
-                    emo_x = start_x + idx * small_emoji_w
-                    if emo in emoji_dict and emoji_dict[emo] is not None:
-                        small_emoji = cv2.resize(emoji_dict[emo], (small_emoji_w, small_emoji_w))
-                        y_emoji = y_min - small_emoji_w - 5
-                        if y_emoji >= 0:
-                            if small_emoji.shape[2] == 4:
-                                for c in range(3):
-                                    frame[y_emoji:y_emoji+small_emoji_w, emo_x:emo_x+small_emoji_w, c] = \
-                                        small_emoji[:,:,c] * (small_emoji[:,:,3]/255.0) + \
-                                        frame[y_emoji:y_emoji+small_emoji_w, emo_x:emo_x+small_emoji_w, c] * \
-                                        (1 - small_emoji[:,:,3]/255.0)
-                            else:
-                                frame[y_emoji:y_emoji+small_emoji_w, emo_x:emo_x+small_emoji_w] = small_emoji
                 emoji_target_w, emoji_y_offset = overlay_emoji(frame, emoji_dict, final_display_emo, x_min, y_min, face_w)
                 cv2.putText(frame, final_display_emo, (x_min + face_w//2 + emoji_target_w//2 + 10, emoji_y_offset + int(emoji_target_w * 0.8)), 1, 1.5, (0, 0, 0), 2)
             else:
@@ -216,9 +198,9 @@ def main():
                     adjust_msgs.append("MOVE CLOSER")
                 elif face_pct > 13:
                     adjust_msgs.append("MOVE BACK")
-                if head_tilt < 5.75:
+                if head_tilt < 5.5:
                     adjust_msgs.append("TILT HEAD DOWN")
-                elif head_tilt > 8.25:
+                elif head_tilt > 8:
                     adjust_msgs.append("TILT HEAD UP")
                 if head_turn < -3:
                     adjust_msgs.append("TURN HEAD LEFT")
@@ -229,7 +211,7 @@ def main():
                 text_x = x_min + (face_w // 2) - (text_w // 2)
                 cv2.putText(frame, adjust_text, (text_x, y_min - 10), 1, 2, (0, 0, 0), 2)
             
-            thresholds = {"Happy": 15, "Sad": 75, "Angry": 60, "Surprise": 65, "Fear": 10, "Neutral": 70}
+            thresholds = {"Happy": 15, "Sad": 75, "Angry": 60, "Surprise": 65, "Fear": 20, "Neutral": 70}
             for i, emo in enumerate(EMOTIONS):
                 score = scores[emo]
                 disp_score = score

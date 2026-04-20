@@ -136,20 +136,21 @@ def main():
             hybrid_buffer.append(hybrid_probs)
             smooth_hybrid = np.mean(hybrid_buffer, axis=0)
             
-            final_idx = np.argmax(smooth_hybrid)
-            final_emotion = EMOTIONS[final_idx]
-            
-            ai_best = EMOTIONS[np.argmax(smooth_ai)]
-            if TRUTH_TABLE.get("SAD_OVER_ANGRY") and ai_best == "Angry" and geo_guess == "Sad":
-                final_emotion = "Sad"
-            if TRUTH_TABLE.get("SURPRISE_OVER_FEAR") and ai_best == "Fear" and geo_guess == "Surprise":
+            scores = {emo: smooth_hybrid[i] * 100 for i, emo in enumerate(EMOTIONS)}
+            if scores["Surprise"] >= 65:
                 final_emotion = "Surprise"
-            
-            if ai_best == "Happy" and smooth_ai[EMOTIONS.index("Happy")] > TRUTH_TABLE.get("HAPPY_THRESHOLD", 0.4):
+            elif scores["Happy"] >= 15:
                 final_emotion = "Happy"
-
-            if SAD_PHYSICAL_OVERRIDE and geo_guess == "Sad":
+            elif scores["Sad"] >= 75:
                 final_emotion = "Sad"
+            elif scores["Fear"] >= 20:
+                final_emotion = "Fear"
+            elif scores["Neutral"] >= 70:
+                final_emotion = "Neutral"
+            elif scores["Angry"] >= 60:
+                final_emotion = "Angry"
+            else:
+                final_emotion = "Neutral"
 
             color = (255, 0, 0) if final_emotion == "Sad" else (0, 255, 0)
             cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), color, 2)

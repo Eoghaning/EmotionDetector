@@ -324,7 +324,7 @@ class EmotionApp(ctk.CTk):
         elif scores["Sad"] >= 75:
             final_display_emo = "Sad"
             final_display_score = scores["Sad"]
-        elif scores["Fear"] >= 10:
+        elif scores["Fear"] >= 20:
             final_display_emo = "Fear"
             final_display_score = scores["Fear"]
         elif scores["Neutral"] >= 70:
@@ -427,7 +427,7 @@ class EmotionApp(ctk.CTk):
             cv2.putText(display, f"F/B: {head_tilt:.1f}%", (10, 50), 1, 0.8, (0, 0, 0), 1)
             cv2.putText(display, f"L/R: {head_turn:.1f}%", (10, 70), 1, 0.8, (0, 0, 0), 1)
             
-            thresholds = {"Happy": 15, "Sad": 75, "Angry": 60, "Surprise": 65, "Fear": 10, "Neutral": 70}
+            thresholds = {"Happy": 15, "Sad": 75, "Angry": 60, "Surprise": 65, "Fear": 20, "Neutral": 70}
             for i, emo in enumerate(EMOTIONS):
                 score = scores[emo]
                 target = thresholds.get(emo, 0)
@@ -437,16 +437,16 @@ class EmotionApp(ctk.CTk):
             for landmark in face_landmarks:
                 cv2.circle(display, (int(landmark.x * w), int(landmark.y * h)), 1, (0, 255, 0), -1)
             
-            in_range = (5.5 <= face_pct <= 13) and (5.75 <= head_tilt <= 8.25) and (-3 <= head_turn <= 3)
+            in_range = (5.5 <= face_pct <= 13) and (5.5 <= head_tilt <= 8) and (-3 <= head_turn <= 3)
             if not in_range:
                 adjust_msgs = []
                 if face_pct < 5.5:
                     adjust_msgs.append("CLOSE")
                 elif face_pct > 13:
                     adjust_msgs.append("BACK")
-                if head_tilt < 5.75:
+                if head_tilt < 5.5:
                     adjust_msgs.append("DOWN")
-                elif head_tilt > 8.25:
+                elif head_tilt > 8:
                     adjust_msgs.append("UP")
                 if head_turn < -3:
                     adjust_msgs.append("LEFT")
@@ -456,6 +456,35 @@ class EmotionApp(ctk.CTk):
                 text_w = cv2.getTextSize(adjust_text, 1, 1.5, 2)[0][0]
                 text_x = x_min + (face_w // 2) - (text_w // 2)
                 cv2.putText(display, adjust_text, (text_x, y_min - 10), 1, 1.5, (0, 0, 255), 2)
+        
+        h, w = display.shape[:2]
+        if h >= 60 and w >= 320:
+            emoji_ref_y = max(0, h - 50)
+            emoji_ref_order = ['Happy', 'Sad', 'Angry', 'Fear', 'Surprise', 'Neutral']
+            emoji_w = min(50, w // 7)
+            total_emoji_w = emoji_w * 6
+            start_emoji_x = (w - total_emoji_w) // 2
+            
+            for idx, emo in enumerate(emoji_ref_order):
+                emo_x = start_emoji_x + idx * emoji_w
+                if emo in self.emoji_dict and self.emoji_dict[emo] is not None:
+                    ref_emoji = cv2.resize(self.emoji_dict[emo], (emoji_w, emoji_w))
+                    if ref_emoji.shape[2] == 4:
+                        y1 = emoji_ref_y
+                        y2 = min(emoji_ref_y + emoji_w, h)
+                        x1 = emo_x
+                        x2 = min(emo_x + emoji_w, w)
+                        for c in range(3):
+                            display[y1:y2, x1:x2, c] = \
+                                ref_emoji[:y2-y1, :x2-x1, c] * (ref_emoji[:y2-y1, :x2-x1, 3]/255.0) + \
+                                display[y1:y2, x1:x2, c] * \
+                                (1 - ref_emoji[:y2-y1, :x2-x1, 3]/255.0)
+                    else:
+                        y1 = emoji_ref_y
+                        y2 = min(emoji_ref_y + emoji_w, h)
+                        x1 = emo_x
+                        x2 = min(emo_x + emoji_w, w)
+                        display[y1:y2, x1:x2] = ref_emoji[:y2-y1, :x2-x1]
         
         return display
 

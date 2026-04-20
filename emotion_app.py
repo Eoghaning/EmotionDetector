@@ -280,10 +280,10 @@ class EmotionApp(ctk.CTk):
         if scores["Surprise"] >= 65:
             final_display_emo = "Surprise"
             final_display_score = scores["Surprise"]
-        elif scores["Happy"] >= 30:
+        elif scores["Happy"] >= 15:
             final_display_emo = "Happy"
             final_display_score = scores["Happy"]
-        elif scores["Sad"] >= 60:
+        elif scores["Sad"] >= 75:
             final_display_emo = "Sad"
             final_display_score = scores["Sad"]
         elif scores["Fear"] >= 20:
@@ -292,7 +292,7 @@ class EmotionApp(ctk.CTk):
         elif scores["Neutral"] >= 70:
             final_display_emo = "Neutral"
             final_display_score = scores["Neutral"]
-        elif scores["Angry"] >= 48:
+        elif scores["Angry"] >= 60:
             final_display_emo = "Angry"
             final_display_score = scores["Angry"]
         
@@ -389,7 +389,7 @@ class EmotionApp(ctk.CTk):
             cv2.putText(display, f"F/B: {head_tilt:.1f}%", (10, 50), 1, 0.8, (0, 0, 0), 1)
             cv2.putText(display, f"L/R: {head_turn:.1f}%", (10, 70), 1, 0.8, (0, 0, 0), 1)
             
-            thresholds = {"Happy": 30, "Sad": 60, "Angry": 48, "Surprise": 65, "Fear": 20, "Neutral": 70}
+            thresholds = {"Happy": 15, "Sad": 75, "Angry": 60, "Surprise": 65, "Fear": 20, "Neutral": 70}
             for i, emo in enumerate(EMOTIONS):
                 score = scores[emo]
                 target = thresholds.get(emo, 0)
@@ -399,16 +399,16 @@ class EmotionApp(ctk.CTk):
             for landmark in face_landmarks:
                 cv2.circle(display, (int(landmark.x * w), int(landmark.y * h)), 1, (0, 255, 0), -1)
             
-            in_range = (5.5 <= face_pct <= 13) and (5.75 <= head_tilt <= 8.25) and (-3 <= head_turn <= 3)
+            in_range = (5.5 <= face_pct <= 13) and (5.5 <= head_tilt <= 8) and (-3 <= head_turn <= 3)
             if not in_range:
                 adjust_msgs = []
                 if face_pct < 5.5:
                     adjust_msgs.append("CLOSE")
                 elif face_pct > 13:
                     adjust_msgs.append("BACK")
-                if head_tilt < 5.75:
+                if head_tilt < 5.5:
                     adjust_msgs.append("DOWN")
-                elif head_tilt > 8.25:
+                elif head_tilt > 8:
                     adjust_msgs.append("UP")
                 if head_turn < -3:
                     adjust_msgs.append("LEFT")
