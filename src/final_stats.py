@@ -226,7 +226,36 @@ def main():
                 h, w, _ = frame.shape
                 text_x = (w // 2) - (text_w // 2)
                 text_y = (h // 2)
-                cv2.putText(frame, no_face_text, (text_x, text_y), 1, 2, (0, 0, 0), 2)
+cv2.putText(frame, no_face_text, (text_x, text_y), 1, 2, (0, 0, 0), 2)
+        
+        h, w = frame.shape[:2]
+        if h >= 60 and w >= 320:
+            emoji_ref_y = max(0, h - 50)
+            emoji_ref_order = ['Happy', 'Sad', 'Angry', 'Fear', 'Surprise', 'Neutral']
+            emoji_w = min(50, w // 7)
+            total_emoji_w = emoji_w * 6
+            start_emoji_x = (w - total_emoji_w) // 2
+            
+            for idx, emo in enumerate(emoji_ref_order):
+                emo_x = start_emoji_x + idx * emoji_w
+                if emo in emoji_dict and emoji_dict[emo] is not None:
+                    ref_emoji = cv2.resize(emoji_dict[emo], (emoji_w, emoji_w))
+                    if ref_emoji.shape[2] == 4:
+                        y1 = emoji_ref_y
+                        y2 = min(emoji_ref_y + emoji_w, h)
+                        x1 = emo_x
+                        x2 = min(emo_x + emoji_w, w)
+                        for c in range(3):
+                            frame[y1:y2, x1:x2, c] = \
+                                ref_emoji[:y2-y1, :x2-x1, c] * (ref_emoji[:y2-y1, :x2-x1, 3]/255.0) + \
+                                frame[y1:y2, x1:x2, c] * \
+                                (1 - ref_emoji[:y2-y1, :x2-x1, 3]/255.0)
+                    else:
+                        y1 = emoji_ref_y
+                        y2 = min(emoji_ref_y + emoji_w, h)
+                        x1 = emo_x
+                        x2 = min(emo_x + emoji_w, w)
+                        frame[y1:y2, x1:x2] = ref_emoji[:y2-y1, :x2-x1]
         
         cv2.imshow('Final Model (stats)', frame)
         key = cv2.waitKey(1) & 0xFF
